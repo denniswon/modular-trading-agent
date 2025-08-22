@@ -1,0 +1,47 @@
+# Core dependencies
+requests>=2.31.0
+dataclasses-json>=0.5.14
+
+# Optional dependencies for specific data providers
+# Uncomment as needed
+
+# For Binance integration (more robust)
+# python-binance>=1.0.19
+
+# For Alpha Vantage integration  
+# alpha-vantage>=2.3.1
+
+# For advanced technical analysis
+# TA-Lib>=0.4.25
+# pandas>=2.0.0
+# numpy>=1.24.0
+
+# For web APIs and HTTP requests
+# aiohttp>=3.8.5
+# httpx>=0.24.1
+
+# For configuration management
+# python-dotenv>=1.0.0
+# pydantic>=2.0.0
+
+# For logging and monitoring
+# structlog>=23.1.0
+# prometheus-client>=0.17.1
+
+# For development and testing
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.1
+# black>=23.7.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+
+# For database integration (if needed)
+# sqlalchemy>=2.0.20
+# sqlite>=3.0.0
+
+# For advanced scheduling
+# APScheduler>=3.10.4
+
+# For GUI (if needed)
+# tkinter>=8.6
+# PyQt5>=5.15.9
