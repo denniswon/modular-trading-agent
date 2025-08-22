@@ -1,7 +1,8 @@
 """
 Main entry point for the modular trading agent.
 
-This module demonstrates the new TradingAgent architecture with pluggable components.
+This module provides traditional trading with synthetic data. For live Solana token
+trading, see agent.solana_main module.
 """
 
 import argparse
@@ -114,11 +115,17 @@ def main():
         description="Modular Trading Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+Examples - Synthetic Data Trading:
   python -m agent.main --demo
   python -m agent.main --strategy sma --symbols BTC-USD ETH-USD --iterations 5
   python -m agent.main --strategy combo --continuous
   python -m agent.main --strategy rsi --risk-equity 25000 --risk-per-trade 0.02
+
+For Live Solana Token Trading:
+  python -m agent.solana_main --demo
+  python -m agent.solana_main --single-cycle
+  python -m agent.solana_main --continuous --duration 30
+  python -m agent.main --solana-info  # Show Solana capabilities
         """
     )
     
@@ -182,7 +189,18 @@ Examples:
         help="Enable verbose logging"
     )
     
+    parser.add_argument(
+        "--solana-info",
+        action="store_true",
+        help="Show information about Solana trading capabilities"
+    )
+    
     args = parser.parse_args()
+    
+    # Handle Solana info request
+    if args.solana_info:
+        print_solana_info()
+        return
     
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -212,6 +230,49 @@ Examples:
         log.info(f"   Iterations: {args.iterations}")
         log.info("")
         agent.run_loop(args.symbols, args.iterations)
+
+
+def print_solana_info():
+    """Print information about Solana trading capabilities."""
+    print("""
+🌟 SOLANA TRADING MODE
+=====================
+
+This modular trading agent now supports live Solana token trading!
+
+📊 FEATURES:
+  • Live token data from Dexscreener API
+  • Real-time price, volume, and liquidity data
+  • Support for popular SPL tokens (BONK, WIF, SOL, USDC, etc.)
+  • Asynchronous streaming data provider
+  • Integrated Solana RPC health monitoring
+
+🚀 QUICK START:
+  python -m agent.solana_main --demo
+  python -m agent.solana_main --single-cycle
+  python -m agent.solana_main --continuous --duration 30
+
+⚙️ CONFIGURATION:
+  Copy .env.example to .env and customize:
+  • SOLANA_RPC_ENDPOINT
+  • Token mint addresses (MINT_BONK, MINT_WIF, etc.)
+  • Risk management parameters
+  • API rate limiting settings
+
+📈 STRATEGIES:
+  All existing strategies work with Solana:
+  • SMA Crossover
+  • RSI Strategy  
+  • Combo Strategy
+
+🛡️ SAFETY:
+  • Paper trading by default
+  • Comprehensive pre-trade filters
+  • Position sizing and risk management
+  • Rate limiting and health checks
+
+📚 See README.md for detailed setup instructions.
+    """)
 
 
 if __name__ == "__main__":

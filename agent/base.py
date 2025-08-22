@@ -7,7 +7,7 @@ This module defines the domain models and abstract interfaces that all component
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, AsyncIterator
 from datetime import datetime
 
 
@@ -84,6 +84,40 @@ class MarketDataProvider(ABC):
             
         Returns:
             MarketSnapshot with recent candles
+        """
+        raise NotImplementedError
+
+
+class AsyncMarketDataProvider(ABC):
+    """Abstract base class for async streaming market data providers."""
+
+    @abstractmethod
+    async def subscribe_ticks(
+        self,
+        tokens: List[str],
+        interval_sec: int = 10,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream live ticks for given token mints/symbols.
+        
+        Args:
+            tokens: List of token identifiers (mint addresses or symbols)
+            interval_sec: Update interval in seconds
+            
+        Yields:
+            Dict per token on each interval with fields like:
+            {
+              "source": "dexscreener",
+              "chain": "solana",
+              "token": "<mint_or_symbol>",
+              "price_usd": float|None,
+              "volume_24h_usd": float|None,
+              "liquidity_usd": float|None,
+              "change_24h_pct": float|None,
+              "pair_address": str|None,
+              "slot": int|None,
+              "rpc_healthy": bool
+            }
         """
         raise NotImplementedError
 
