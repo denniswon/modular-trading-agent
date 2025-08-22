@@ -1,148 +1,140 @@
 """
 Base classes for the modular trading agent.
 
-This module defines the abstract interfaces that all components must implement.
+This module defines the domain models and abstract interfaces that all components must implement.
 """
 
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any
+from datetime import datetime
 
 
-class SignalType(Enum):
-    """Trading signal types."""
-    BUY = "buy"
-    SELL = "sell"
-    HOLD = "hold"
-
+# -----------------------------
+# Domain models
+# -----------------------------
 
 @dataclass
-class MarketData:
-    """Market data structure."""
-    symbol: str
-    price: float
+class Candle:
+    """OHLCV candle data structure."""
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
     volume: float
-    timestamp: float
-    additional_data: Optional[Dict[str, Any]] = None
 
 
 @dataclass
-class TradingSignal:
-    """Trading signal structure."""
+class MarketSnapshot:
+    """Market data snapshot containing recent candles."""
     symbol: str
-    signal_type: SignalType
-    confidence: float  # 0.0 to 1.0
-    quantity: Optional[float] = None
-    price: Optional[float] = None
-    metadata: Optional[Dict[str, Any]] = None
+    candles: List[Candle]  # ordered oldest -> newest
 
 
 @dataclass
-class TradeResult:
-    """Trade execution result."""
-    success: bool
-    message: str
-    order_id: Optional[str] = None
-    executed_price: Optional[float] = None
-    executed_quantity: Optional[float] = None
+class Signal:
+    """Trading signal with confidence and metadata."""
+    symbol: str
+    side: str  # 'buy', 'sell', 'flat'
+    confidence: float  # 0.0 to 1.0
+    meta: Dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass
+class OrderRequest:
+    """Order request structure for trade execution."""
+    symbol: str
+    side: str            # 'buy' or 'sell'
+    size: float          # units/shares
+    order_type: str      # 'market', 'limit', etc.
+    limit_price: Optional[float] = None
+    time_in_force: str = "GTC"
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class OrderResult:
+    """Trade execution result."""
+    ok: bool
+    order_id: Optional[str] = None
+    error: Optional[str] = None
+    filled_price: Optional[float] = None
+    filled_size: Optional[float] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+# -----------------------------
+# Base interfaces (extension points)
+# -----------------------------
 
 class MarketDataProvider(ABC):
     """Abstract base class for market data providers."""
-    
+
     @abstractmethod
-    def fetch_data(self, symbol: str) -> MarketData:
+    def get_snapshot(self, symbol: str, lookback: int = 200, timeframe: str = "1h") -> MarketSnapshot:
         """
-        Fetch market data for a given symbol.
+        Return a snapshot of recent candles. Must be ordered oldest -> newest.
         
         Args:
-            symbol: Trading symbol (e.g., 'BTCUSDT')
+            symbol: Trading symbol (e.g., 'BTC-USD')
+            lookback: Number of candles to retrieve
+            timeframe: Candle timeframe (e.g., '1h', '1d')
             
         Returns:
-            MarketData object with current market information
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    def get_historical_data(self, symbol: str, period: str, limit: int = 100) -> list[MarketData]:
-        """
-        Get historical market data.
-        
-        Args:
-            symbol: Trading symbol
-            period: Time period (e.g., '1h', '1d')
-            limit: Number of data points to retrieve
-            
-        Returns:
-            List of historical MarketData objects
+            MarketSnapshot with recent candles
         """
         raise NotImplementedError
 
 
 class SignalProcessor(ABC):
     """Abstract base class for trading signal processors."""
-    
+
     @abstractmethod
-    def generate_signal(self, data: MarketData, historical_data: Optional[list[MarketData]] = None) -> TradingSignal:
+    def generate(self, snapshot: MarketSnapshot) -> Signal:
         """
-        Generate a trading signal based on market data.
+        Generate a trading signal from market data.
         
         Args:
-            data: Current market data
-            historical_data: Optional historical data for analysis
+            snapshot: Market snapshot with recent candles
             
         Returns:
-            TradingSignal with recommendation
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    def update_parameters(self, parameters: Dict[str, Any]) -> None:
-        """
-        Update strategy parameters.
-        
-        Args:
-            parameters: Dictionary of parameter updates
+            Signal with trading recommendation
         """
         raise NotImplementedError
 
 
 class TradeExecutor(ABC):
     """Abstract base class for trade executors."""
-    
+
     @abstractmethod
-    def execute_trade(self, signal: TradingSignal) -> TradeResult:
+    def place_order(self, order: OrderRequest) -> OrderResult:
         """
-        Execute a trade based on the given signal.
+        Execute a trade order.
         
         Args:
-            signal: TradingSignal to execute
+            order: Order request to execute
             
         Returns:
-            TradeResult with execution details
+            OrderResult with execution details
         """
         raise NotImplementedError
-    
+
+
+class PreTradeFilter(ABC):
+    """Optional filters to suppress low-quality signals."""
+
     @abstractmethod
-    def get_account_balance(self) -> Dict[str, float]:
+    def allow(self, snapshot: MarketSnapshot, signal: Signal) -> bool:
         """
-        Get current account balances.
-        
-        Returns:
-            Dictionary mapping asset symbols to balances
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    def get_open_orders(self, symbol: Optional[str] = None) -> list[Dict[str, Any]]:
-        """
-        Get list of open orders.
+        Determine if a signal should be allowed through.
         
         Args:
-            symbol: Optional symbol filter
+            snapshot: Market snapshot
+            signal: Trading signal to evaluate
             
         Returns:
-            List of open order dictionaries
+            True if signal should be allowed, False to block
         """
         raise NotImplementedError

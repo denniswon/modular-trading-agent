@@ -1,64 +1,49 @@
 #!/usr/bin/env python3
 """
 Basic test script that works without external dependencies.
-Tests only the core modular functionality.
+Tests the new modular trading agent architecture.
 """
 
 import sys
 import os
 import time
 import random
+from datetime import datetime, timedelta
+from typing import List
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from agent.base import MarketDataProvider, MarketData, SignalProcessor, TradingSignal, SignalType, TradeExecutor, TradeResult
+from agent.base import MarketDataProvider, MarketSnapshot, Candle, SignalProcessor, Signal, TradeExecutor, OrderRequest, OrderResult
 
 # Simple test implementations that don't require external libraries
 class TestDataProvider(MarketDataProvider):
     """Test data provider without external dependencies."""
     
-    def __init__(self):
-        self.price_cache = {}
+    def __init__(self, seed: int = 42):
+        random.seed(seed)
         
-    def fetch_data(self, symbol: str) -> MarketData:
-        base_price = self.price_cache.get(symbol, 50000.0 if 'BTC' in symbol else 100.0)
-        price_change = random.uniform(-0.02, 0.025)
-        new_price = base_price * (1 + price_change)
-        self.price_cache[symbol] = new_price
+    def _generate_series(self, start_price: float, n: int) -> List[Candle]:
+        now = datetime.utcnow()
+        candles: List[Candle] = []
+        price = start_price
+        for i in range(n):
+            # simple random walk
+            change = random.gauss(0, 0.5)
+            o = price
+            c = max(0.1, price + change)
+            h = max(o, c) + random.random() * 0.3
+            l = min(o, c) - random.random() * 0.3
+            v = random.uniform(1000, 10000)
+            ts = now - timedelta(hours=(n - i))
+            candles.append(Candle(ts=ts, open=o, high=h, low=l, close=c, volume=v))
+            price = c
+        return candles
         
-        return MarketData(
-            symbol=symbol,
-            price=round(new_price, 2),
-            volume=random.uniform(1000, 10000),
-            timestamp=time.time(),
-            additional_data={
-                'high_24h': new_price * 1.05,
-                'low_24h': new_price * 0.95,
-                'change_24h': random.uniform(-5, 5)
-            }
-        )
-    
-    def get_historical_data(self, symbol: str, period: str, limit: int = 100) -> list[MarketData]:
-        historical_data = []
-        current_time = time.time()
-        base_price = 50000.0 if 'BTC' in symbol else 100.0
-        
-        for i in range(limit):
-            timestamp = current_time - (i * 3600)
-            price_change = random.uniform(-0.03, 0.03)
-            price = base_price * (1 + price_change)
-            base_price = price
-            
-            historical_data.append(MarketData(
-                symbol=symbol,
-                price=round(price, 2),
-                volume=random.uniform(500, 5000),
-                timestamp=timestamp,
-                additional_data={'period': period}
-            ))
-        
-        return list(reversed(historical_data))
+    def get_snapshot(self, symbol: str, lookback: int = 200, timeframe: str = "1h") -> MarketSnapshot:
+        base = 100.0 + hash(symbol) % 50  # deterministic-ish seed per symbol
+        candles = self._generate_series(float(base), lookback)
+        return MarketSnapshot(symbol=symbol, candles=candles)
 
 class TestStrategy(SignalProcessor):
     """Test strategy without external dependencies."""
@@ -66,80 +51,70 @@ class TestStrategy(SignalProcessor):
     def __init__(self):
         self.last_price = None
         
-    def generate_signal(self, data: MarketData, historical_data=None) -> TradingSignal:
+    def generate(self, snapshot: MarketSnapshot) -> Signal:
+        price = snapshot.candles[-1].close
+        
         if not self.last_price:
-            self.last_price = data.price
-            return TradingSignal(
-                symbol=data.symbol,
-                signal_type=SignalType.HOLD,
+            self.last_price = price
+            return Signal(
+                symbol=snapshot.symbol,
+                side="flat",
                 confidence=0.5,
-                metadata={'reason': 'Initial price recorded'}
+                meta={'reason': 'Initial price recorded'}
             )
         
-        price_change = (data.price - self.last_price) / self.last_price
-        self.last_price = data.price
+        price_change = (price - self.last_price) / self.last_price
+        self.last_price = price
         
         if price_change >= 0.02:
-            return TradingSignal(
-                symbol=data.symbol,
-                signal_type=SignalType.BUY,
+            return Signal(
+                symbol=snapshot.symbol,
+                side="buy",
                 confidence=min(0.9, 0.5 + abs(price_change) * 2),
-                quantity=1.0,
-                price=data.price,
-                metadata={'price_change': price_change, 'reason': f'Price up {price_change:.2%}'}
+                meta={'price_change': price_change, 'reason': f'Price up {price_change:.2%}'}
             )
         elif price_change <= -0.015:
-            return TradingSignal(
-                symbol=data.symbol,
-                signal_type=SignalType.SELL,
+            return Signal(
+                symbol=snapshot.symbol,
+                side="sell",
                 confidence=min(0.9, 0.5 + abs(price_change) * 2),
-                quantity=1.0,
-                price=data.price,
-                metadata={'price_change': price_change, 'reason': f'Price down {price_change:.2%}'}
+                meta={'price_change': price_change, 'reason': f'Price down {price_change:.2%}'}
             )
         else:
-            return TradingSignal(
-                symbol=data.symbol,
-                signal_type=SignalType.HOLD,
+            return Signal(
+                symbol=snapshot.symbol,
+                side="flat",
                 confidence=0.7,
-                metadata={'price_change': price_change, 'reason': 'Price within thresholds'}
+                meta={'price_change': price_change, 'reason': 'Price within thresholds'}
             )
-    
-    def update_parameters(self, parameters):
-        pass
 
 class TestExecutor(TradeExecutor):
     """Test executor without external dependencies."""
     
     def __init__(self):
-        self.balances = {"USDT": 10000.0, "BTC": 0.0}
+        self._orders = []
         
-    def execute_trade(self, signal: TradingSignal) -> TradeResult:
-        print(f"🔔 Signal: {signal.signal_type.value.upper()} {signal.symbol}")
-        print(f"   Confidence: {signal.confidence:.2%}")
-        if signal.metadata:
-            print(f"   Reason: {signal.metadata.get('reason', 'No reason')}")
+    def place_order(self, order: OrderRequest) -> OrderResult:
+        print(f"🔔 Order: {order.side.upper()} {order.size:.4f} {order.symbol}")
+        print(f"   Type: {order.order_type}")
+        if order.meta:
+            print(f"   Meta: {order.meta}")
         
-        if signal.signal_type == SignalType.HOLD:
-            return TradeResult(success=True, message="Hold position")
-        
-        # Simulate trade execution
-        return TradeResult(
-            success=True,
-            message=f"Simulated {signal.signal_type.value} for {signal.symbol}",
-            order_id="test123",
-            executed_price=signal.price,
-            executed_quantity=signal.quantity
+        # Simulate successful execution
+        result = OrderResult(
+            ok=True,
+            order_id=f"test-{int(time.time()*1000)}",
+            filled_price=order.limit_price if order.order_type == "limit" else None,
+            filled_size=order.size,
+            meta={"echo": order.meta}
         )
-    
-    def get_account_balance(self):
-        return self.balances.copy()
-    
-    def get_open_orders(self, symbol=None):
-        return []
+        
+        self._orders.append(result)
+        print(f"   ✅ Executed: Order ID {result.order_id}")
+        return result
 
 def main():
-    print("🧪 Testing Modular Trading Agent (Basic)")
+    print("🧪 Testing Modular Trading Agent (New Architecture)")
     print("=" * 50)
     
     # Create components
@@ -147,35 +122,46 @@ def main():
     strategy = TestStrategy()
     executor = TestExecutor()
     
-    symbol = "BTCUSDT"
+    symbol = "BTC-USD"
     
     # Test multiple iterations
     for i in range(5):
         print(f"\n📊 Iteration {i+1}/5")
         print("-" * 30)
         
-        # Get data
-        data = provider.fetch_data(symbol)
-        print(f"💰 Current price: ${data.price:,.2f}")
+        # Get market snapshot
+        snapshot = provider.get_snapshot(symbol, lookback=50)
+        current_price = snapshot.candles[-1].close
+        print(f"💰 Current price: ${current_price:,.2f}")
+        print(f"📈 Candles available: {len(snapshot.candles)}")
         
         # Generate signal
-        signal = strategy.generate_signal(data)
+        signal = strategy.generate(snapshot)
+        print(f"📊 Signal: {signal.side.upper()} (confidence: {signal.confidence:.2%})")
+        if signal.meta:
+            print(f"   Reason: {signal.meta.get('reason', 'No reason')}")
         
-        # Execute trade
-        result = executor.execute_trade(signal)
-        
-        if result.success:
-            print(f"✅ {result.message}")
+        # Execute if not flat
+        if signal.side != "flat":
+            order = OrderRequest(
+                symbol=symbol,
+                side=signal.side,
+                size=1.0,
+                order_type="market",
+                meta={"confidence": signal.confidence}
+            )
+            result = executor.place_order(order)
         else:
-            print(f"❌ {result.message}")
+            print("   ⏸️ No trade (FLAT signal)")
         
-        time.sleep(0.5)  # Brief pause
+        time.sleep(0.2)  # Brief pause
     
     print("\n🎉 All tests completed successfully!")
+    print("\nThe new architecture is working correctly!")
     print("\nNext steps:")
-    print("1. Install dependencies: pip install -r requirements.txt")
-    print("2. Run full demo: python -m agent.main --demo")
-    print("3. Try different strategies: python -m agent.main --strategy ma --single")
+    print("1. Run full demo: python3 -m agent.main --demo")
+    print("2. Try different strategies: python3 -m agent.main --strategy sma --iterations 3")
+    print("3. Test RSI strategy: python3 -m agent.main --strategy rsi --symbols BTC-USD")
 
 if __name__ == "__main__":
     main()

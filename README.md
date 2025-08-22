@@ -25,103 +25,95 @@ pip install -r requirements.txt
 ### Basic Usage
 
 ```bash
-# Run a single trading iteration with demo mode
-python -m agent.main --single --demo
+# Run demo with all strategies (recommended first step)
+python3 -m agent.main --demo
 
-# Run continuous trading with different strategies
-python -m agent.main --strategy ma --executor paper --interval 30
+# Run specific strategy with multiple symbols
+python3 -m agent.main --strategy sma --symbols BTC-USD ETH-USD --iterations 5
 
-# Use real Binance data (read-only)
-python -m agent.main --data-provider binance --strategy rsi --executor demo
+# Run continuous trading with risk management
+python3 -m agent.main --strategy combo --continuous --risk-equity 10000
 ```
 
 ### Programmatic Usage
 
 ```python
-from agent.data_provider import DummyProvider
-from agent.strategy import MovingAverageStrategy
-from agent.executor import PaperTradingExecutor
-from agent.main import TradingBot
+from agent.data_provider import InMemoryMarketData
+from agent.strategy import SmaCrossoverStrategy
+from agent.executor import PaperBroker
+from agent.filters import ConfidenceFilter, VolatilityFilter
+from agent.risk_manager import RiskManager
+from agent.trading_agent import TradingAgent
 
 # Create components
-data_provider = DummyProvider()
-strategy = MovingAverageStrategy(short_window=5, long_window=20)
-executor = PaperTradingExecutor()
+data = InMemoryMarketData()
+strategy = SmaCrossoverStrategy(fast=10, slow=30)
+broker = PaperBroker()
+filters = [ConfidenceFilter(min_confidence=0.6)]
+risk = RiskManager(account_equity=10000, risk_per_trade=0.01)
 
-# Create and run bot
-bot = TradingBot(data_provider, strategy, executor)
-bot.run_single_iteration("BTCUSDT")
+# Create and run agent
+agent = TradingAgent(data, strategy, broker, filters, risk)
+agent.run_loop(["BTC-USD"], iterations=3)
 ```
 
 ## 🏗️ Architecture
 
-The framework is built around three core abstract components:
+The framework is built around four core abstract components with clean interfaces:
 
 ### 📡 Data Providers (`MarketDataProvider`)
-- **DummyProvider**: Generates fake market data for testing
-- **BinanceProvider**: Fetches real-time data from Binance API
-- **AlphaVantageProvider**: Fetches stock data from Alpha Vantage API
+- **InMemoryMarketData**: Generates synthetic OHLCV candles for testing
+- Returns `MarketSnapshot` objects with ordered candle data
 
 ### 🧠 Trading Strategies (`SignalProcessor`)  
-- **SimpleStrategy**: Basic momentum-based trading
-- **MovingAverageStrategy**: MA crossover signals
-- **RSIStrategy**: RSI overbought/oversold signals
-- **ComboStrategy**: Combines multiple indicators
+- **SmaCrossoverStrategy**: SMA crossover buy/sell signals
+- **RsiStrategy**: RSI overbought/oversold signals
+- **ComboStrategy**: Combines SMA and RSI strategies
 
 ### ⚡ Trade Executors (`TradeExecutor`)
-- **PrintExecutor**: Logs trades without execution
-- **PaperTradingExecutor**: Realistic simulation with P&L tracking
-- **DemoExecutor**: Combines logging and paper trading
-- **BinanceExecutor**: Live trading (placeholder - needs implementation)
+- **PaperBroker**: Simulated order execution with realistic fills
+
+### 🛡️ Pre-Trade Filters (`PreTradeFilter`)
+- **BasicTimeFilter**: Trading hours restriction
+- **VolatilityFilter**: Minimum volatility requirements  
+- **TrendFilter**: Trend alignment filtering
+- **ConfidenceFilter**: Minimum confidence thresholds
 
 ## 📋 Command Line Interface
 
 ```bash
-python -m agent.main [OPTIONS]
+python3 -m agent.main [OPTIONS]
 
 Options:
-  -s, --symbol TEXT           Trading symbol (default: BTCUSDT)
-  -d, --data-provider TEXT    Data provider: dummy, binance
-  -st, --strategy TEXT        Strategy: simple, ma, rsi, combo  
-  -e, --executor TEXT         Executor: print, paper, demo
-  -i, --interval INT          Trading interval in seconds
-  --single                    Run single iteration
+  -s, --symbols TEXT+         Trading symbols (default: BTC-USD ETH-USD SOL-USD)
+  -st, --strategy TEXT        Strategy: sma, rsi, combo (default: sma)
+  -i, --iterations INT        Number of iterations (default: 3)  
+  -p, --poll-seconds INT      Polling interval in seconds (default: 2)
+  -e, --risk-equity FLOAT     Account equity for risk management (default: 50000)
+  -r, --risk-per-trade FLOAT  Risk per trade percentage (default: 0.01)
   --demo                      Run demo with all strategies
+  --continuous                Run continuously until interrupted
+  --verbose                   Enable verbose logging
 ```
 
-## 📊 Example Output
+## 📄 Example Output
 
 ```
-🤖 Trading Bot Configuration:
-   Symbol: BTCUSDT
-   Data Provider: dummy
-   Strategy: ma
-   Executor: demo
+🤖 Trading Agent Configuration:
+   Symbols: BTC-USD, ETH-USD
+   Strategy: sma
+   Risk Equity: $50,000.00
+   Risk Per Trade: 1.00%
+   Poll Interval: 2s
+   Iterations: 3
 
-🔍 Fetching data for BTCUSDT...
-Current price: $51,234.56
-Historical data points: 50
-Generated signal: BUY (confidence: 78%)
-
-[2024-01-15 10:30:15] BUY signal for BTCUSDT
-  Quantity: 0.195000
-  Price: $51,234.56
-  Confidence: 78.00%
-  Reason: Bullish crossover: MA5 > MA20
-  short_ma: 51145.2340
-  long_ma: 50987.8901
-
-✅ Trade executed: Bought 0.195000 BTC at $51,234.56
-
-💰 Current balances:
-   USDT: $0.00
-   BTC: 0.195000
-
-📈 Performance stats:
-   Portfolio value: $9,990.74
-   Total return: -0.09%
-   Number of trades: 1
-   Win rate: 100.0%
+🚀 Starting trading agent with 2 symbols for 3 iterations
+--- Iteration 1/3 ---
+[PaperBroker] Placed BUY 4.2847 BTC-USD (market)
+✅ EXECUTED | BTC-USD BUY | Price: 140.3778 | Conf: 68.40% | RR: 2.0
+         Order ID: paper-1755842009152
+⏸️ SKIPPED | ETH-USD FLAT | Price: 101.9742 | Conf: 41.30% | RR: 0.0
+💤 Waiting 2s before next iteration...
 ```
 
 ## 🔧 Configuration & Customization
@@ -129,57 +121,82 @@ Generated signal: BUY (confidence: 78%)
 ### Creating Custom Data Providers
 
 ```python
-from agent.base import MarketDataProvider, MarketData
+from agent.base import MarketDataProvider, MarketSnapshot, Candle
+from datetime import datetime, timedelta
+from typing import List
 
 class MyDataProvider(MarketDataProvider):
-    def fetch_data(self, symbol: str) -> MarketData:
-        # Implement your data fetching logic
-        return MarketData(
-            symbol=symbol,
-            price=50000.0,
-            volume=1000.0,
-            timestamp=time.time()
-        )
-    
-    def get_historical_data(self, symbol: str, period: str, limit: int = 100):
-        # Implement historical data fetching
-        return []
+    def get_snapshot(self, symbol: str, lookback: int = 200, timeframe: str = "1h") -> MarketSnapshot:
+        # Fetch from your data source (CCXT, Alpaca, etc.)
+        candles = []
+        for i in range(lookback):
+            candle = Candle(
+                ts=datetime.now() - timedelta(hours=i),
+                open=50000.0, high=51000.0, low=49000.0, close=50500.0, volume=1000.0
+            )
+            candles.append(candle)
+        return MarketSnapshot(symbol=symbol, candles=list(reversed(candles)))
 ```
 
 ### Creating Custom Strategies
 
 ```python
-from agent.base import SignalProcessor, TradingSignal, SignalType
+from agent.base import SignalProcessor, Signal, MarketSnapshot
 
 class MyStrategy(SignalProcessor):
-    def generate_signal(self, data, historical_data=None) -> TradingSignal:
+    def generate(self, snapshot: MarketSnapshot) -> Signal:
         # Implement your trading logic
-        return TradingSignal(
-            symbol=data.symbol,
-            signal_type=SignalType.BUY,  # or SELL, HOLD
-            confidence=0.8,
-            quantity=1.0,
-            price=data.price
-        )
-    
-    def update_parameters(self, parameters):
-        # Update strategy parameters
-        pass
+        closes = [c.close for c in snapshot.candles]
+        current_price = closes[-1]
+        
+        # Example: simple momentum
+        if len(closes) >= 2:
+            change = (closes[-1] - closes[-2]) / closes[-2]
+            if change > 0.02:  # 2% increase
+                return Signal(snapshot.symbol, "buy", 0.8, {"momentum": change})
+            elif change < -0.02:  # 2% decrease
+                return Signal(snapshot.symbol, "sell", 0.8, {"momentum": change})
+        
+        return Signal(snapshot.symbol, "flat", 0.1, {"reason": "no clear signal"})
 ```
 
 ### Creating Custom Executors
 
 ```python
-from agent.base import TradeExecutor, TradeResult
+from agent.base import TradeExecutor, OrderRequest, OrderResult
+import time
 
 class MyExecutor(TradeExecutor):
-    def execute_trade(self, signal) -> TradeResult:
-        # Implement your execution logic
-        return TradeResult(
-            success=True,
-            message=f"Executed {signal.signal_type.value} for {signal.symbol}",
-            order_id="12345"
-        )
+    def place_order(self, order: OrderRequest) -> OrderResult:
+        # Implement your execution logic (API calls to exchange)
+        try:
+            # Simulate order execution
+            order_id = f"order-{int(time.time()*1000)}"
+            return OrderResult(
+                ok=True,
+                order_id=order_id,
+                filled_price=order.limit_price,
+                filled_size=order.size
+            )
+        except Exception as e:
+            return OrderResult(ok=False, error=str(e))
+```
+
+### Creating Custom Filters
+
+```python
+from agent.base import PreTradeFilter, MarketSnapshot, Signal
+
+class VolumeFilter(PreTradeFilter):
+    def __init__(self, min_volume: float = 10000):
+        self.min_volume = min_volume
+    
+    def allow(self, snapshot: MarketSnapshot, signal: Signal) -> bool:
+        if signal.side == "flat":
+            return True
+        
+        recent_volume = sum(c.volume for c in snapshot.candles[-5:])  # Last 5 candles
+        return recent_volume >= self.min_volume
 ```
 
 ## 🔐 Security & Risk Management

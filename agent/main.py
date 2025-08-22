@@ -1,239 +1,217 @@
 """
 Main entry point for the modular trading agent.
 
-This module demonstrates how to use the different components together.
+This module demonstrates the new TradingAgent architecture with pluggable components.
 """
 
-import time
 import argparse
-from typing import Optional
+import logging
+from typing import List
 
-from .data_provider import DummyProvider, BinanceProvider
-from .strategy import SimpleStrategy, MovingAverageStrategy, RSIStrategy, ComboStrategy
-from .executor import PrintExecutor, PaperTradingExecutor, DemoExecutor
+from .data_provider import InMemoryMarketData
+from .strategy import SmaCrossoverStrategy, RsiStrategy, ComboStrategy
+from .executor import PaperBroker
+from .filters import BasicTimeFilter, VolatilityFilter, TrendFilter, ConfidenceFilter
+from .risk_manager import RiskManager
+from .trading_agent import TradingAgent
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+log = logging.getLogger("main")
 
 
-class TradingBot:
-    """Main trading bot that orchestrates all components."""
+def create_agent(strategy_name: str = "sma", 
+                 risk_equity: float = 50000.0,
+                 risk_per_trade: float = 0.01,
+                 poll_seconds: int = 2) -> TradingAgent:
+    """
+    Factory function to create a TradingAgent with specified components.
     
-    def __init__(self, data_provider, strategy, executor):
-        self.data_provider = data_provider
-        self.strategy = strategy
-        self.executor = executor
-        self.running = False
+    Args:
+        strategy_name: Name of strategy to use ('sma', 'rsi', 'combo')
+        risk_equity: Account equity for risk management
+        risk_per_trade: Risk per trade as percentage (0.01 = 1%)
+        poll_seconds: Polling interval for continuous mode
         
-    def run_single_iteration(self, symbol: str = "BTCUSDT") -> None:
-        """Run a single trading iteration."""
-        print(f"🔍 Fetching data for {symbol}...")
-        
-        # Get current market data
-        current_data = self.data_provider.fetch_data(symbol)
-        print(f"Current price: ${current_data.price:,.2f}")
-        
-        # Get historical data for better analysis
-        historical_data = self.data_provider.get_historical_data(symbol, "1h", 50)
-        print(f"Historical data points: {len(historical_data)}")
-        
-        # Generate trading signal
-        signal = self.strategy.generate_signal(current_data, historical_data)
-        print(f"Generated signal: {signal.signal_type.value.upper()} (confidence: {signal.confidence:.2%})")
-        
-        # Execute trade
-        result = self.executor.execute_trade(signal)
-        
-        if result.success:
-            print(f"✅ Trade executed: {result.message}")
-        else:
-            print(f"❌ Trade failed: {result.message}")
-        
-        print("-" * 50)
-    
-    def run_continuous(self, symbol: str = "BTCUSDT", interval: int = 60) -> None:
-        """Run the bot continuously with specified interval."""
-        print(f"🚀 Starting continuous trading bot for {symbol}")
-        print(f"⏰ Trading interval: {interval} seconds")
-        print("Press Ctrl+C to stop\n")
-        
-        self.running = True
-        iteration = 0
-        
-        try:
-            while self.running:
-                iteration += 1
-                print(f"📊 Iteration #{iteration} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                self.run_single_iteration(symbol)
-                
-                # Show current balances if available
-                try:
-                    balances = self.executor.get_account_balance()
-                    print("💰 Current balances:")
-                    for asset, amount in balances.items():
-                        if amount > 0:
-                            if asset == "USDT":
-                                print(f"   {asset}: ${amount:,.2f}")
-                            else:
-                                print(f"   {asset}: {amount:.6f}")
-                    print()
-                except AttributeError:
-                    pass  # Executor doesn't have balance tracking
-                
-                # Show performance stats if available
-                try:
-                    current_data = self.data_provider.fetch_data(symbol)
-                    stats = self.executor.get_performance_stats(current_data.price)
-                    if "error" not in stats:
-                        print("📈 Performance stats:")
-                        print(f"   Portfolio value: ${stats['current_value']:,.2f}")
-                        print(f"   Total return: {stats['total_return_pct']:+.2f}%")
-                        print(f"   Number of trades: {stats['num_trades']}")
-                        print(f"   Win rate: {stats['win_rate_pct']:.1f}%")
-                        print()
-                except AttributeError:
-                    pass  # Executor doesn't have performance stats
-                
-                # Wait for next iteration
-                if self.running:
-                    time.sleep(interval)
-                    
-        except KeyboardInterrupt:
-            print("\n⏹️  Bot stopped by user")
-            self.running = False
-    
-    def stop(self):
-        """Stop the bot."""
-        self.running = False
-
-
-def create_bot(data_provider_type: str = "dummy", 
-               strategy_type: str = "simple", 
-               executor_type: str = "print",
-               **kwargs) -> TradingBot:
-    """Factory function to create a trading bot with specified components."""
-    
+    Returns:
+        Configured TradingAgent
+    """
     # Create data provider
-    if data_provider_type.lower() == "dummy":
-        data_provider = DummyProvider()
-    elif data_provider_type.lower() == "binance":
-        data_provider = BinanceProvider()
-    else:
-        print(f"Unknown data provider: {data_provider_type}, using dummy")
-        data_provider = DummyProvider()
+    data = InMemoryMarketData()
     
     # Create strategy
-    if strategy_type.lower() == "simple":
-        strategy = SimpleStrategy()
-    elif strategy_type.lower() == "ma" or strategy_type.lower() == "moving_average":
-        strategy = MovingAverageStrategy()
-    elif strategy_type.lower() == "rsi":
-        strategy = RSIStrategy()
-    elif strategy_type.lower() == "combo":
-        strategy = ComboStrategy()
+    if strategy_name.lower() == "sma":
+        strategy = SmaCrossoverStrategy(fast=10, slow=30, min_confidence=0.55)
+    elif strategy_name.lower() == "rsi":
+        strategy = RsiStrategy(period=14, oversold=30, overbought=70)
+    elif strategy_name.lower() == "combo":
+        strategy = ComboStrategy(fast=10, slow=30, rsi_period=14)
     else:
-        print(f"Unknown strategy: {strategy_type}, using simple")
-        strategy = SimpleStrategy()
+        log.warning(f"Unknown strategy '{strategy_name}', using SMA")
+        strategy = SmaCrossoverStrategy()
     
-    # Create executor
-    if executor_type.lower() == "print":
-        executor = PrintExecutor()
-    elif executor_type.lower() == "paper":
-        executor = PaperTradingExecutor()
-    elif executor_type.lower() == "demo":
-        executor = DemoExecutor()
-    else:
-        print(f"Unknown executor: {executor_type}, using print")
-        executor = PrintExecutor()
+    # Create trade executor
+    broker = PaperBroker()
     
-    return TradingBot(data_provider, strategy, executor)
+    # Create filters
+    filters = [
+        BasicTimeFilter(start_hour_utc=0, end_hour_utc=24),  # Allow all hours by default
+        VolatilityFilter(min_volatility=0.001),  # Minimum volatility filter
+        ConfidenceFilter(min_confidence=0.6),    # Confidence threshold
+    ]
+    
+    # Create risk manager
+    risk = RiskManager(account_equity=risk_equity, risk_per_trade=risk_per_trade)
+    
+    # Create and return trading agent
+    return TradingAgent(
+        data=data,
+        strategy=strategy,
+        broker=broker,
+        filters=filters,
+        risk=risk,
+        poll_seconds=poll_seconds,
+    )
+
+
+def run_demo(symbols: List[str] = None):
+    """Run demonstration with different strategies."""
+    if symbols is None:
+        symbols = ["BTC-USD", "ETH-USD", "SOL-USD"]
+    
+    log.info("🎯 Running Trading Agent Demo")
+    log.info("=" * 60)
+    
+    strategies = [
+        ("SMA Crossover", "sma"),
+        ("RSI Strategy", "rsi"),
+        ("Combo Strategy", "combo")
+    ]
+    
+    for strategy_name, strategy_key in strategies:
+        log.info(f"\n📊 Testing {strategy_name}")
+        log.info("-" * 40)
+        
+        agent = create_agent(
+            strategy_name=strategy_key,
+            risk_equity=10000.0,
+            risk_per_trade=0.01,
+            poll_seconds=1
+        )
+        
+        # Run 2 iterations for this strategy
+        agent.run_loop(symbols, iterations=2)
+    
+    log.info("\n🎉 Demo completed!")
 
 
 def main():
     """Main function with command line interface."""
-    parser = argparse.ArgumentParser(description="Modular Trading Agent")
-    parser.add_argument("--symbol", "-s", default="BTCUSDT", 
-                       help="Trading symbol (default: BTCUSDT)")
-    parser.add_argument("--data-provider", "-d", default="dummy",
-                       choices=["dummy", "binance"],
-                       help="Data provider to use (default: dummy)")
-    parser.add_argument("--strategy", "-st", default="simple",
-                       choices=["simple", "ma", "rsi", "combo"],
-                       help="Trading strategy to use (default: simple)")
-    parser.add_argument("--executor", "-e", default="demo",
-                       choices=["print", "paper", "demo"],
-                       help="Trade executor to use (default: demo)")
-    parser.add_argument("--interval", "-i", type=int, default=60,
-                       help="Trading interval in seconds (default: 60)")
-    parser.add_argument("--single", action="store_true",
-                       help="Run single iteration instead of continuous")
-    parser.add_argument("--demo", action="store_true",
-                       help="Run demo with different strategies")
+    parser = argparse.ArgumentParser(
+        description="Modular Trading Agent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python -m agent.main --demo
+  python -m agent.main --strategy sma --symbols BTC-USD ETH-USD --iterations 5
+  python -m agent.main --strategy combo --continuous
+  python -m agent.main --strategy rsi --risk-equity 25000 --risk-per-trade 0.02
+        """
+    )
+    
+    parser.add_argument(
+        "--symbols", "-s", 
+        nargs="+",
+        default=["BTC-USD", "ETH-USD", "SOL-USD"],
+        help="Trading symbols (default: BTC-USD ETH-USD SOL-USD)"
+    )
+    
+    parser.add_argument(
+        "--strategy", "-st", 
+        choices=["sma", "rsi", "combo"],
+        default="sma",
+        help="Trading strategy to use (default: sma)"
+    )
+    
+    parser.add_argument(
+        "--iterations", "-i", 
+        type=int, 
+        default=3,
+        help="Number of iterations to run (default: 3)"
+    )
+    
+    parser.add_argument(
+        "--poll-seconds", "-p", 
+        type=int, 
+        default=2,
+        help="Polling interval in seconds (default: 2)"
+    )
+    
+    parser.add_argument(
+        "--risk-equity", "-e", 
+        type=float, 
+        default=50000.0,
+        help="Account equity for risk management (default: 50000)"
+    )
+    
+    parser.add_argument(
+        "--risk-per-trade", "-r", 
+        type=float, 
+        default=0.01,
+        help="Risk per trade as percentage (default: 0.01 = 1%)"
+    )
+    
+    parser.add_argument(
+        "--demo", 
+        action="store_true",
+        help="Run demo with all strategies"
+    )
+    
+    parser.add_argument(
+        "--continuous", "-c", 
+        action="store_true",
+        help="Run continuously until interrupted"
+    )
+    
+    parser.add_argument(
+        "--verbose", "-v", 
+        action="store_true",
+        help="Enable verbose logging"
+    )
     
     args = parser.parse_args()
     
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
     if args.demo:
-        run_demo()
+        run_demo(args.symbols)
         return
     
-    # Create and run bot
-    bot = create_bot(
-        data_provider_type=args.data_provider,
-        strategy_type=args.strategy,
-        executor_type=args.executor
+    # Create and configure agent
+    agent = create_agent(
+        strategy_name=args.strategy,
+        risk_equity=args.risk_equity,
+        risk_per_trade=args.risk_per_trade,
+        poll_seconds=args.poll_seconds
     )
     
-    print(f"🤖 Trading Bot Configuration:")
-    print(f"   Symbol: {args.symbol}")
-    print(f"   Data Provider: {args.data_provider}")
-    print(f"   Strategy: {args.strategy}")
-    print(f"   Executor: {args.executor}")
-    print(f"   Interval: {args.interval}s")
-    print()
+    log.info(f"🤖 Trading Agent Configuration:")
+    log.info(f"   Symbols: {', '.join(args.symbols)}")
+    log.info(f"   Strategy: {args.strategy}")
+    log.info(f"   Risk Equity: ${args.risk_equity:,.2f}")
+    log.info(f"   Risk Per Trade: {args.risk_per_trade:.2%}")
+    log.info(f"   Poll Interval: {args.poll_seconds}s")
     
-    if args.single:
-        bot.run_single_iteration(args.symbol)
+    if args.continuous:
+        agent.run_continuous(args.symbols)
     else:
-        bot.run_continuous(args.symbol, args.interval)
-
-
-def run_demo():
-    """Run a demonstration with different strategies."""
-    print("🎯 Running Trading Agent Demo")
-    print("=" * 60)
-    
-    symbol = "BTCUSDT"
-    strategies = [
-        ("Simple Momentum", SimpleStrategy()),
-        ("Moving Average", MovingAverageStrategy(short_window=5, long_window=15)),
-        ("RSI Strategy", RSIStrategy()),
-        ("Combo Strategy", ComboStrategy())
-    ]
-    
-    # Use dummy data provider and demo executor
-    data_provider = DummyProvider()
-    
-    for strategy_name, strategy in strategies:
-        print(f"\n📊 Testing {strategy_name}")
-        print("-" * 40)
-        
-        executor = DemoExecutor()
-        bot = TradingBot(data_provider, strategy, executor)
-        
-        # Run 3 iterations
-        for i in range(3):
-            print(f"Iteration {i+1}/3:")
-            bot.run_single_iteration(symbol)
-            time.sleep(1)  # Brief pause
-        
-        # Show final stats
-        try:
-            current_data = data_provider.fetch_data(symbol)
-            stats = executor.get_performance_stats(current_data.price)
-            if "error" not in stats:
-                print(f"Final Performance - Return: {stats['total_return_pct']:+.2f}%, Trades: {stats['num_trades']}")
-        except:
-            pass
-        
-        print()
+        log.info(f"   Iterations: {args.iterations}")
+        log.info("")
+        agent.run_loop(args.symbols, args.iterations)
 
 
 if __name__ == "__main__":
