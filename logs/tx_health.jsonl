@@ -1,0 +1,2 @@
+{"event": "health_check", "provider": "photon", "healthy": false, "details": {"error": ""}, "timestamp": "2025-08-22T06:58:51.061403+00:00"}
+{"event": "health_check", "provider": "gmgn", "healthy": false, "details": {"status_code": 403, "response_time_ms": 0}, "timestamp": "2025-08-22T06:58:51.126600+00:00"}

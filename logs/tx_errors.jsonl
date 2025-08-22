@@ -1,0 +1,1 @@
+{"event": "error", "provider": "photon", "error": "Quote request failed: TimeoutError: ", "context": {"request": {"token_in_mint": "So11111111111111111111111111111111111111112", "token_out_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "amount_in_atomic": 100000000, "slippage_bps": 100}}, "timestamp": "2025-08-22T06:59:22.064653+00:00"}

@@ -1,0 +1,31 @@
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_quote_result:186 | [photon] Quote: $0.000164 per token, out: 164000, impact: 10bps
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:log_performance:240 | [photon] quote: 0ms ✓
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_request:130 | [photon] Simulating swap: 100000000 11111112 → ZwyTDt1v
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_result:153 | [photon] Simulation successful
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_result:156 | [photon] Execution price: $0.000164
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_quote_result:186 | [gmgn] Quote: $0.000162 per token, out: 162000, impact: 20bps
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:log_performance:240 | [gmgn] quote: 0ms ✓
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_request:130 | [gmgn] Simulating swap: 100000000 11111112 → ZwyTDt1v
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_quote_result:186 | [gmgn] Quote: $0.000162 per token, out: 162000, impact: 20bps
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:log_performance:240 | [gmgn] quote: 0ms ✓
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_result:153 | [gmgn] Simulation successful
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:log_execution_result:156 | [gmgn] Execution price: $0.000162
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:debug:257 | Provider photon is healthy
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:debug:257 | Provider gmgn is healthy
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:debug:257 | Trying quote from photon
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:info:245 | Quote successful from photon
+2025-08-21 23:58:07 | INFO     | agent.tx_logger:info:245 | AutoExecutor routing TransactionType.BUY order using first_success strategy
+2025-08-21 23:58:07 | WARNING  | agent.tx_logger:log_quote_result:192 | [photon] Quote failed: Quote failed: 400 - Insufficient liquidity
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:log_performance:240 | [photon] quote: 0ms ✓
+2025-08-21 23:58:07 | WARNING  | agent.tx_logger:log_rate_limit:226 | [photon] Rate limit encountered
+2025-08-21 23:58:07 | WARNING  | agent.tx_logger:log_quote_result:192 | [photon] Quote failed: Rate limited by Photon API
+2025-08-21 23:58:07 | DEBUG    | agent.tx_logger:log_performance:240 | [photon] quote: 0ms ✓
+2025-08-21 23:58:51 | INFO     | agent.tx_logger:log_health_check:216 | [photon] Health check: unhealthy
+2025-08-21 23:58:51 | WARNING  | agent.tx_logger:warning:253 | Provider photon is unhealthy
+2025-08-21 23:58:51 | INFO     | agent.tx_logger:log_health_check:216 | [gmgn] Health check: unhealthy
+2025-08-21 23:58:51 | WARNING  | agent.tx_logger:warning:253 | Provider gmgn is unhealthy
+2025-08-21 23:58:51 | WARNING  | agent.tx_logger:warning:253 | No healthy providers for quote, trying all as fallback
+2025-08-21 23:59:22 | ERROR    | agent.tx_logger:log_error:203 | [photon] Quote request failed: TimeoutError: 
+2025-08-21 23:59:22 | WARNING  | agent.tx_logger:warning:253 | Quote failed from photon: Quote request failed: TimeoutError: 
+2025-08-21 23:59:22 | WARNING  | agent.tx_logger:log_quote_result:192 | [gmgn] Quote failed: Quote request failed: ContentTypeError: 0, message='Attempt to decode JSON with unexpected mimetype: text/html; charset=utf-8', url=URL('https://gmgn.ai/defi/quotev2?from=So11111111111111111111111111111111111111112&to=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=100000000&slippage=0.01&chain=solana')
+2025-08-21 23:59:22 | WARNING  | agent.tx_logger:warning:253 | Quote failed from gmgn: Quote request failed: ContentTypeError: 0, message='Attempt to decode JSON with unexpected mimetype: text/html; charset=utf-8', url=URL('https://gmgn.ai/defi/quotev2?from=So11111111111111111111111111111111111111112&to=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=100000000&slippage=0.01&chain=solana')

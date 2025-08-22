@@ -1,0 +1,8 @@
+{"event": "performance", "provider": "photon", "operation": "quote", "duration_ms": 0, "success": true, "timestamp": "2025-08-22T06:58:07.105465+00:00"}
+{"event": "performance", "provider": "gmgn", "operation": "quote", "duration_ms": 0, "success": true, "timestamp": "2025-08-22T06:58:07.124358+00:00"}
+{"event": "performance", "provider": "gmgn", "operation": "quote", "duration_ms": 0, "success": true, "timestamp": "2025-08-22T06:58:07.125105+00:00"}
+{"event": "performance", "provider": "photon", "operation": "quote", "duration_ms": 0, "success": true, "timestamp": "2025-08-22T06:58:07.156729+00:00"}
+{"event": "performance", "provider": "photon", "operation": "quote", "duration_ms": 0, "success": true, "timestamp": "2025-08-22T06:58:07.157468+00:00"}
+{"event": "performance", "provider": "photon", "operation": "quote", "duration_ms": 30933, "success": false, "timestamp": "2025-08-22T06:59:22.063564+00:00"}
+{"event": "performance", "provider": "photon", "operation": "quote", "duration_ms": 30935, "success": true, "timestamp": "2025-08-22T06:59:22.065181+00:00"}
+{"event": "performance", "provider": "gmgn", "operation": "quote", "duration_ms": 46, "success": true, "timestamp": "2025-08-22T06:59:22.111756+00:00"}

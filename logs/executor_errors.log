@@ -1,0 +1,1 @@
+2025-08-21 23:59:22 | ERROR    | agent.tx_logger:log_error:203 | [photon] Quote request failed: TimeoutError: 
